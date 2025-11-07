@@ -76,44 +76,11 @@ uploaded_file = st.sidebar.file_uploader("Upload your review CSV file", type=["c
 
 review_column = None
 # --- THIS IS THE FIX for the 'None' bug ---
-if uploaded_file is not None:
-    try:
-        # Read only the first 5 rows to get column names
-        df_preview = pd.read_csv(uploaded_file, nrows=5)
-        available_columns = df_preview.columns.tolist()
-        review_column = st.sidebar.selectbox(
-            "Which column has the review text?",
-            available_columns,
-            index=0 
-        )
-    except Exception as e:
-        st.sidebar.error(f"Error reading CSV header: {e}")
-        uploaded_file = None # Use the real 'None'
-        
-
-# --- Main Page (All Results) ---
-
-if real_time_button:
-    st.header("Real-Time Analysis")
-    analyzer = get_vader_model()
-    sentiment = predict_sentiment(real_time_review, analyzer)
-    topic = find_topic(real_time_review)
-    
-    st.subheader("Sentiment")
-    if sentiment == "Positive":
-        st.success(f"**{sentiment}**")
-    else:
-        st.error(f"**{sentiment}**")
-        
-    st.subheader("Detected Topic")
-    st.info(f"**{topic}**")
-
-# --- THIS IS THE FIX for the 'None' bug ---
 elif uploaded_file is not None and review_column is not None:
     st.header("Batch Analysis Dashboard")
-    
+
     try:
-        # Now, load and analyze the *full* CSV
+        uploaded_file.seek(0)  # ✅ Reset pointer before full read
         df = pd.read_csv(uploaded_file)
         df_analyzed = analyze_dataframe(df, review_column)
 
@@ -131,7 +98,7 @@ elif uploaded_file is not None and review_column is not None:
         # 3. Show Topic Bar Charts
         st.subheader("Topic Analysis")
         col1, col2 = st.columns(2)
-        
+
         neg_df = df_analyzed[df_analyzed['Sentiment'] == 'Negative']
         neg_topics = neg_df['Topic'].value_counts()
         fig_neg_bar = px.bar(
@@ -158,9 +125,10 @@ elif uploaded_file is not None and review_column is not None:
         st.subheader("Analyzed Data")
         st.write("Here is your uploaded data with the new 'Sentiment' and 'Topic' columns.")
         st.dataframe(df_analyzed)
-        
+
     except Exception as e:
         st.error(f"An error occurred during analysis: {e}")
+
 
 else:
     # This is the default welcome page
