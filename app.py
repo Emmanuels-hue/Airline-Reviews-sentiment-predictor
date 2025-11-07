@@ -216,3 +216,34 @@ elif uploaded_file is not None and review_column is not None:
 else:
     st.header("Welcome to the Airline Sentiment Dashboard")
     st.info("Use the sidebar to analyze a single review or upload a CSV file.")
+
+df_analyzed = analyze_dataframe(df, review_column)
+
+        # ✅ Accuracy Evaluation Block (only if ground-truth sentiment exists)
+        possible_truth_cols = [
+            'Sentiment', 'Label', 'TrueSentiment',
+            'ActualSentiment', 'GroundTruth'
+        ]
+
+        # detect a truth column that is NOT the predicted sentiment column
+        truth_col = next(
+            (col for col in possible_truth_cols
+             if col in df.columns and col not in ['Sentiment', review_column]),
+            None
+        )
+
+        if truth_col:
+            st.subheader("📌 Model Accuracy Check")
+
+            truth = df[truth_col].astype(str).str.strip().str.capitalize()
+            pred = df_analyzed['Sentiment'].astype(str).str.strip().str.capitalize()
+
+            correct = (truth == pred).sum()
+            total = len(df_analyzed)
+            accuracy = (correct / total) * 100 if total > 0 else 0
+
+            st.metric("✅ Accuracy", f"{accuracy:.2f}%")
+            st.caption(f"Compared against column: `{truth_col}`")
+
+        else:
+            st.info("⚠️ No ground-truth sentiment column found → Accuracy can’t be computed.")
