@@ -1,104 +1,218 @@
 import streamlit as st
 import pandas as pd
-from textblob import TextBlob
-import matplotlib.pyplot as plt
+import plotly.express as px
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+import re
 
-st.set_page_config(page_title="Sentiment Analyzer", layout="centered")
+# --- Page Setup ---
+st.set_page_config(page_title="Airline Sentiment Dashboard", layout="wide")
 
-# ---------------- Helper Functions ---------------- #
-def analyze_sentiment(review):
-    polarity = TextBlob(review).sentiment.polarity
-    if polarity > 0:
-        sentiment = "Positive"
-    elif polarity == 0:
-        sentiment = "Neutral"
+# --- Topic/Domain Definitions (expand/modify as needed) ---
+TOPIC_KEYWORDS = {
+    "Staff": [
+        "staff", "crew", "service", "attendant", "agent", "customer service",
+        "boarding crew", "flight attendants", "steward", "stewardess", "helpful",
+        "rude", "friendly", "support"
+    ],
+    "Timings": [
+        "delay", "delayed", "late", "on time", "schedule", "timing", "earlier",
+        "landed earlier", "flight landed", "terrible flight delays", "flight cancelled"
+    ],
+    "Food": [
+        "food", "meal", "drink", "beverage", "snack", "tasty", "water", "water bottle",
+        "water bottles", "food tasted", "meal service"
+    ],
+    "Baggage": [
+        "baggage", "bag", "luggage", "lost", "damaged", "suitcase", "lost my baggage",
+        "baggage arrived", "baggage damaged"
+    ],
+    "Price": [
+        "price", "cost", "cheap", "expensive", "fare", "ticket price", "charged extra",
+        "value"
+    ],
+    "Comfort": [
+        "seat", "seats", "legroom", "comfort", "comfortable", "uncomfortable", "dirty",
+        "clean", "tray tables", "restroom", "toilet", "cabin", "air conditioning"
+    ],
+    "Boarding / Checkin": [
+        "boarding", "check in", "check-in", "checkin", "boarding was", "fast boarding",
+        "slow boarding", "check in took forever", "friendly check in"
+    ],
+    "Wifi / Entertainment": [
+        "wifi", "internet", "entertainment", "no entertainment", "inflight entertainment",
+        "wifi did not work", "wifi worked"
+    ],
+    "Security": [
+        "security", "security check", "security staff", "polite", "chaotic"
+    ],
+    "Announcements / Pilot": [
+        "pilot", "announcements", "pilot announcements", "gave updates", "no updates"
+    ]
+}
+
+# Precompile keyword regexes for speed (create a dict topic -> list of compiled patterns)
+COMPILED_KEYWORDS = {}
+for topic, keywords in TOPIC_KEYWORDS.items():
+    patterns = []
+    for kw in keywords:
+        # create word-boundary insensitive regex for multi-word too
+        # escape special chars in keyword
+        esc = re.escape(kw)
+        patterns.append(re.compile(r"\b" + esc + r"\b", flags=re.IGNORECASE))
+    COMPILED_KEYWORDS[topic] = patterns
+
+# --- VADER model (cached) ---
+@st.cache_resource
+def get_vader_model():
+    return SentimentIntensityAnalyzer()
+
+def predict_sentiment_with_score(text, analyzer):
+    """
+    Returns tuple (label, compound_score). Use VADER recommended thresholds:
+     - compound >= 0.05 => Positive
+     - compound <= -0.05 => Negative
+     - otherwise => Neutral
+    """
+    if not isinstance(text, str):
+        text = str(text)
+    scores = analyzer.polarity_scores(text)
+    compound = scores.get("compound", 0.0)
+    if compound >= 0.05:
+        label = "Positive"
+    elif compound <= -0.05:
+        label = "Negative"
     else:
-        sentiment = "Negative"
-    return sentiment, polarity
+        label = "Neutral"
+    return label, compound
 
-def analyze_dataframe(df, column):
-    df["Sentiment"] = df[column].apply(lambda x: analyze_sentiment(str(x))[0])
-    df["Polarity Score"] = df[column].apply(lambda x: analyze_sentiment(str(x))[1])
+def find_topic_by_count(review_text):
+    """
+    Count keyword matches across all topics and return topic with highest count.
+    Fall back to "Other" when no matches.
+    """
+    if not isinstance(review_text, str):
+        review_text = str(review_text)
+    text = review_text.lower()
+    match_counts = {}
+    for topic, patterns in COMPILED_KEYWORDS.items():
+        count = 0
+        for pat in patterns:
+            # count occurrences (findall)
+            found = pat.findall(text)
+            if found:
+                count += len(found)
+        match_counts[topic] = count
+
+    # pick the topic with the maximum matches
+    best_topic = max(match_counts, key=lambda t: match_counts[t])
+    if match_counts[best_topic] == 0:
+        return "Other"
+    return best_topic
+
+# cached analyzer for DataFrame
+@st.cache_data
+def analyze_dataframe(df, review_column):
+    analyzer = get_vader_model()
+    df = df.copy()
+
+    # ensure text column
+    df['review_text'] = df[review_column].apply(lambda x: "" if pd.isna(x) else str(x).strip())
+
+    # sentiment label + score
+    results = df['review_text'].apply(lambda txt: predict_sentiment_with_score(txt, analyzer))
+    df['Sentiment'] = results.apply(lambda t: t[0])
+    df['SentimentScore'] = results.apply(lambda t: t[1])
+
+    # topic detection
+    df['Topic'] = df['review_text'].apply(find_topic_by_count)
+
     return df
 
-# ---------------- UI Layout ---------------- #
-st.title("✈ Airline Review Sentiment Predictor")
-st.write("Analyze text or upload batch CSV for sentiment insights!")
+# --- Sidebar (UI) ---
+st.sidebar.title("Airline Sentiment Dashboard")
+st.sidebar.header("Real-Time Review")
+real_time_review = st.sidebar.text_area("Enter a review:", "The crew was friendly but the flight was delayed.")
+real_time_button = st.sidebar.button("Analyze Review")
 
-tabs = st.tabs(["Single Review", "Batch CSV Analysis"])
+st.sidebar.header("Batch CSV Analysis")
+uploaded_file = st.sidebar.file_uploader("Upload your reviews CSV", type=["csv"])
 
-# ---------------- SINGLE REVIEW TAB ---------------- #
-with tabs[0]:
-    user_review = st.text_area("Enter a review:")
-    
-    if st.button("Analyze Review"):
-        if user_review.strip():
-            sentiment, polarity = analyze_sentiment(user_review)
-            st.success(f"Predicted Sentiment: **{sentiment}**")
-            st.write(f"Polarity Score: `{polarity:.2f}`")
-        else:
-            st.error("Please enter a review.")
+review_column = None
+if uploaded_file is not None:
+    try:
+        # preview to get columns
+        preview_df = pd.read_csv(uploaded_file, nrows=5)
+        review_column = st.sidebar.selectbox("Which column contains the review text?", preview_df.columns.tolist())
+    except Exception as e:
+        st.sidebar.error(f"Error reading CSV header: {e}")
+        uploaded_file = None
 
-# ---------------- BATCH CSV TAB ---------------- #
-with tabs[1]:
-    uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
-    review_column = st.text_input("Enter column name containing reviews:", placeholder="e.g., Review")
+# --- Main page ---
+if real_time_button:
+    st.header("Real-Time Analysis")
+    analyzer = get_vader_model()
+    label, score = predict_sentiment_with_score(real_time_review, analyzer)
+    topic = find_topic_by_count(real_time_review)
 
-    if uploaded_file is not None:
-        uploaded_file.seek(0)
-        try:
-            df = pd.read_csv(uploaded_file)
-            st.success("✅ File loaded successfully!")
-            st.write("📌 Available columns:", df.columns.tolist())
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-            df = None
+    st.subheader("Sentiment")
+    if label == "Positive":
+        st.success(f"{label} (score={score:.3f})")
+    elif label == "Negative":
+        st.error(f"{label} (score={score:.3f})")
     else:
-        df = None
+        st.info(f"{label} (score={score:.3f})")
 
-    if st.button("Start Batch Analysis"):
-        if df is None:
-            st.error("Upload a CSV first.")
-        elif review_column not in df.columns:
-            st.error("Review column not found!")
-        else:
-            st.header("📊 Batch Analysis Dashboard")
-            df_analyzed = analyze_dataframe(df.copy(), review_column)
-            st.dataframe(df_analyzed.head())
+    st.subheader("Topic")
+    st.write(topic)
 
-            # ---------- Accuracy Evaluation (if ground truth exists) ---------- #
-            possible_truth_cols = [
-                'Sentiment', 'Label', 'TrueSentiment', 
-                'ActualSentiment', 'GroundTruth'
-            ]
-            truth_col = next((col for col in possible_truth_cols if col in df.columns and col != review_column and col != "Sentiment"), None)
+elif uploaded_file is not None and review_column is not None:
+    st.header("Batch Analysis Dashboard")
+    try:
+        uploaded_file.seek(0)  # important: reset pointer after preview
+        df = pd.read_csv(uploaded_file)
 
-            if truth_col:
-                truth = df[truth_col].astype(str).str.capitalize().str.strip()
-                predicted = df_analyzed['Sentiment'].astype(str).str.capitalize().str.strip()
+        if df.empty:
+            st.error("Uploaded CSV is empty.")
+            st.stop()
 
-                total = len(df_analyzed)
-                correct = (truth == predicted).sum()
-                accuracy = correct / total if total > 0 else 0
+        # run analysis
+        df_analyzed = analyze_dataframe(df, review_column)
 
-                st.metric("✅ Model Accuracy", f"{accuracy*100:.2f}%")
-                st.caption(f"Compared against column: `{truth_col}`")
-            else:
-                st.info("⚠️ No labelled sentiment column detected → Cannot compute accuracy.")
+        # show sample and stats
+        st.subheader("Sample of analyzed data")
+        st.dataframe(df_analyzed.head(20))
 
-            # ---------- Visualization ---------- #
-            sent_counts = df_analyzed["Sentiment"].value_counts()
-            st.subheader("Sentiment Distribution")
-            fig, ax = plt.subplots()
-            sent_counts.plot(kind="bar")
-            plt.title("Sentiment Count")
-            plt.xlabel("Sentiment")
-            plt.ylabel("Count")
-            st.pyplot(fig)
+        # overall sentiment counts (include Neutral)
+        st.subheader("Sentiment distribution")
+        sentiment_counts = df_analyzed['Sentiment'].value_counts().reindex(['Positive','Neutral','Negative']).fillna(0)
+        fig_pie = px.pie(names=sentiment_counts.index, values=sentiment_counts.values, title="Sentiment breakdown")
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-            st.download_button(
-                label="📥 Download Analyzed Results",
-                data=df_analyzed.to_csv(index=False),
-                file_name="sentiment_results.csv",
-                mime="text/csv"
-            )
+        # topic counts for Negative and Positive separately
+        st.subheader("Top topics by sentiment")
+        col1, col2 = st.columns(2)
+
+        neg_topics = df_analyzed[df_analyzed['Sentiment'] == 'Negative']['Topic'].value_counts()
+        pos_topics = df_analyzed[df_analyzed['Sentiment'] == 'Positive']['Topic'].value_counts()
+
+        fig_neg = px.bar(x=neg_topics.index, y=neg_topics.values, labels={'x': 'Topic', 'y': 'Count'}, title="Top Negative Topics")
+        fig_pos = px.bar(x=pos_topics.index, y=pos_topics.values, labels={'x': 'Topic', 'y': 'Count'}, title="Top Positive Topics")
+
+        col1.plotly_chart(fig_neg, use_container_width=True)
+        col2.plotly_chart(fig_pos, use_container_width=True)
+
+        # show the full table if user likes
+        with st.expander("Show full analyzed table"):
+            st.dataframe(df_analyzed)
+
+        # show a small debug table of borderline cases
+        st.subheader("Borderline / neutral cases (inspect manually)")
+        borderline = df_analyzed[df_analyzed['Sentiment'] == 'Neutral'][['review_text','SentimentScore','Topic']].head(30)
+        st.table(borderline)
+
+    except Exception as e:
+        st.error(f"An error occurred during analysis: {e}")
+
+else:
+    st.header("Welcome to the Airline Sentiment Dashboard")
+    st.info("Use the sidebar to analyze a single review or upload a CSV file.")
