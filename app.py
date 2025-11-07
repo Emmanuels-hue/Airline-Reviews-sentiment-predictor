@@ -51,7 +51,10 @@ def analyze_dataframe(_df, review_column):
     # Create a new copy to avoid cache warnings
     df = _df.copy()
     
-    df['review_text'] = df[review_column].astype(str)
+    # --- THIS IS THE FIX for the 'str' object error ---
+    # .apply(str) is safer than .astype(str)
+    df['review_text'] = df[review_column].apply(str)
+    
     df['Sentiment'] = df['review_text'].apply(lambda x: predict_sentiment(x, analyzer))
     df['Topic'] = df['review_text'].apply(find_topic)
     return df
@@ -72,7 +75,8 @@ st.sidebar.header("Batch CSV Analysis")
 uploaded_file = st.sidebar.file_uploader("Upload your review CSV file", type=["csv"])
 
 review_column = None
-if uploaded_file is not None:  # <-- FIXED: 'is not None' (no quotes)
+# --- THIS IS THE FIX for the 'None' bug ---
+if uploaded_file is not None:
     try:
         # Read only the first 5 rows to get column names
         df_preview = pd.read_csv(uploaded_file, nrows=5)
@@ -84,7 +88,7 @@ if uploaded_file is not None:  # <-- FIXED: 'is not None' (no quotes)
         )
     except Exception as e:
         st.sidebar.error(f"Error reading CSV header: {e}")
-        uploaded_file = None  # <-- FIXED: 'None' (no quotes)
+        uploaded_file = None # Use the real 'None'
         
 
 # --- Main Page (All Results) ---
@@ -104,7 +108,8 @@ if real_time_button:
     st.subheader("Detected Topic")
     st.info(f"**{topic}**")
 
-elif uploaded_file is not None and review_column is not None:  # <-- FIXED
+# --- THIS IS THE FIX for the 'None' bug ---
+elif uploaded_file is not None and review_column is not None:
     st.header("Batch Analysis Dashboard")
     
     try:
