@@ -131,7 +131,7 @@ def analyze_dataframe(df, review_column):
 # --- Sidebar (UI) ---
 st.sidebar.title("Airline Sentiment Dashboard")
 st.sidebar.header("Real-Time Review")
-real_time_review = st.sidebar.text_area("Enter a review:", "The crew was friendly but the timings was delayed.")
+real_time_review = st.sidebar.text_area("Enter a review:", "The crew was not friendly , They yelled at my son for accidentally spilling water on the corridor.")
 real_time_button = st.sidebar.button("Analyze Review")
 
 st.sidebar.header("Batch CSV Analysis")
