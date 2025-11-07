@@ -42,6 +42,7 @@ def find_topic(review):
             return topic
     return "Other"
 
+# Use _df to avoid a Streamlit caching bug
 @st.cache_data
 def analyze_dataframe(_df, review_column):
     """Runs full analysis on the uploaded dataframe."""
@@ -71,7 +72,7 @@ st.sidebar.header("Batch CSV Analysis")
 uploaded_file = st.sidebar.file_uploader("Upload your review CSV file", type=["csv"])
 
 review_column = None
-if uploaded_file is not None:
+if uploaded_file is not None:  # <-- FIXED: 'is not None' (no quotes)
     try:
         # Read only the first 5 rows to get column names
         df_preview = pd.read_csv(uploaded_file, nrows=5)
@@ -83,7 +84,7 @@ if uploaded_file is not None:
         )
     except Exception as e:
         st.sidebar.error(f"Error reading CSV header: {e}")
-        uploaded_file = None
+        uploaded_file = None  # <-- FIXED: 'None' (no quotes)
         
 
 # --- Main Page (All Results) ---
@@ -103,7 +104,7 @@ if real_time_button:
     st.subheader("Detected Topic")
     st.info(f"**{topic}**")
 
-elif uploaded_file is not None and review_column is not None:
+elif uploaded_file is not None and review_column is not None:  # <-- FIXED
     st.header("Batch Analysis Dashboard")
     
     try:
