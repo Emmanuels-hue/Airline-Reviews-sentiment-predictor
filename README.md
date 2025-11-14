@@ -25,7 +25,10 @@ Logic: Regex-based keyword models for topic detection
 Deployment: Hosted on Hugging Face Spaces for easy browser access
 
 Why I Built It
-This project combines my interests in NLP, data visualization, and real-world problem-solving. The goal was to create a simple and efficient tool that turns messy text reviews into clean insights—something airlines and businesses can actually use to make better decisions.
+The goal was to create a simple and efficient tool that turns messy text reviews into clean insights—something airlines and businesses can actually use to know the ground reality of their product/service and make data driven decisions.
+
+Live Demo: https://huggingface.co/spaces/Emmanuels-hue/airline-sentiment-dashboard
+
 <img width="1452" height="537" alt="Screenshot 2025-11-14 114936" src="https://github.com/user-attachments/assets/c4062a38-6e16-4e9c-89a7-d0123b58e2a7" />
 <img width="1484" height="660" alt="Screenshot 2025-11-14 114925" src="https://github.com/user-attachments/assets/dcd69b86-9b80-40b9-bd13-e10dcf66f3a0" />
 <img width="1445" height="609" alt="Screenshot 2025-11-14 114917" src="https://github.com/user-attachments/assets/d7446eed-969e-4068-95bf-0773a7f235d2" />
