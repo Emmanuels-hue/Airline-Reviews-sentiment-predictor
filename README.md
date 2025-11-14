@@ -1,4 +1,5 @@
 Airline Sentiment Dashboard
+
 The Airline Sentiment Dashboard is an interactive web app that makes it easy to analyze airline customer reviews using natural language processing. Instead of manually reading through thousands of comments, the dashboard instantly processes them to uncover overall sentiment and key discussion themes.
 
 What It Does
